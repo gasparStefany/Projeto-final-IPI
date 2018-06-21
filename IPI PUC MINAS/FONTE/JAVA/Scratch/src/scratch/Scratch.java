@@ -8,6 +8,7 @@ package scratch;
 import database.DataBase;
 import java.applet.Applet;
 import java.applet.AudioClip;
+import java.awt.Component;
 import java.net.Socket;
 import java.io.*;
 import java.io.FileOutputStream;
@@ -15,7 +16,11 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.ConnectException;
 import people.Pessoa;
+import scratch.frame.Screen;
 import java.util.Scanner;
+import javax.swing.JOptionPane;
+import static javax.swing.JOptionPane.ERROR_MESSAGE;
+import static javax.swing.JOptionPane.OK_OPTION;
 import resultado.Resultado;
 /**
  * 
@@ -23,35 +28,41 @@ import resultado.Resultado;
  */
 public class Scratch{
    private static DataBase db;
+   public static boolean bool = false;
     /**
      * 
      * @throws InterruptedException 
      * @throws java.io.IOException 
      * @throws java.net.ConnectException 
      */
-    public static void chegadaDados() throws InterruptedException, IOException, ClassNotFoundException{
+    public static void chegadaDados(String key, String user) throws InterruptedException, IOException, ClassNotFoundException{
     	String ip = "127.0.0.1";
         int port = 42001;
+        
+        boolean resp_socket = false,resp_database = false;
         
         Socket socket = null;
         FileOutputStream fileoutputstream = null;
         DataInputStream in = null;     
-        carregando();
             
         try{  
-            socket = new Socket(ip, port); 
+            socket = new Socket(ip,port); 
             db = new DataBase();
-            db.connection();
-            System.out.println("Conecção estabelecida com sucesso!\n");
-            getSom();
-        }catch(ConnectException e){
-            System.out.println("ERRO: Não foi possível estabelecer conecção!");
-            System.exit(1);
+            resp_database = db.connection(key,user);
+            if(!resp_database){
+                JOptionPane.showMessageDialog(null,"Conecção estabelecida com sucesso!");
+                getSom();
+            }// End if    
+        }catch(ConnectException e2){ 
+            resp_socket = true;
         }// End catch
-         System.out.println("#################################################################################################################"); 
-        //System.out.println("Pressione [q] para parar de ler dados\n");
-        Scanner input = new Scanner(System.in);
-        //char chr = ' ';
+        
+        if(resp_socket || resp_database){
+            JOptionPane.showMessageDialog(null,"Não foi possível estabelecer conecção!","Erro de conecção",OK_OPTION);
+            System.exit(1);
+        }// End if
+        
+        Scanner input = new Scanner(System.in); 
         
         Pessoa pessoa = new Pessoa();
         Resultado resultado = new Resultado();
@@ -61,7 +72,7 @@ public class Scratch{
             while(true){
                 if(in.available() > 0){
                     String string = ler(in);
-                    if(getData(string,pessoa,resultado)){
+                   if(getData(string,pessoa,resultado)){
                         db.insert(pessoa,resultado);
                         pessoa = new Pessoa();
                         resultado = new Resultado();
@@ -82,21 +93,35 @@ public class Scratch{
         boolean resp = false;
         if(str.contains("sensor-update "+String.valueOf((char)0x22)+"nome"+String.valueOf((char)0x22))){
             str = str.replace("sensor-update "+String.valueOf((char)0x22)+"nome"+String.valueOf((char)0x22),"");
-            str = str.replace(String.valueOf((char)0x22),"");
+            str = str.replace(String.valueOf((char)0x22),"");          
             pessoa.setNome(str.trim());
         }else if(str.contains("sensor-update "+String.valueOf((char)0x22)+"email"+String.valueOf((char)0x22))){
             str = str.replace("sensor-update "+String.valueOf((char)0x22)+"email"+String.valueOf((char)0x22),"");
-            str = str.replace(String.valueOf((char)0x22),"");
-            pessoa.setEmail(str.trim());
+            str = str.replace(String.valueOf((char)0x22),"").trim();
+            String[] stringemail = str.split(" ");
+            pessoa.setEmail(stringemail[0].trim());
+        }else if(str.contains(String.valueOf((char)0x22)+"resposta"+String.valueOf((char)0x22)) && 
+                !str.contains(String.valueOf((char)0x22)+"nome"+String.valueOf((char)0x22)) && 
+                !str.contains(String.valueOf((char)0x22)+"email"+String.valueOf((char)0x22))){
+           
+            String[] stringvalue = str.split(" ");
+            str = getInt(stringvalue).trim();
+            int intvalue = isNumber(str) ? Integer.parseInt(str) : -2;
+            
+            if(resultado.getResposta_soma1() == -1){
+                resultado.setResposta_soma1(Integer.parseInt(str));
+            }else if(resultado.getResposta_soma2() == -1){
+                resultado.setResposta_soma2(Integer.parseInt(str));
+            }else{
+                resultado.setResposta_soma3(Integer.parseInt(str));
+            }// End else
         }else if(str.contains("sensor-update "+String.valueOf((char)0x22)+"primeiroNumero"+String.valueOf((char)0x22)) && 
             str.contains("resultado") && str.contains("segundoNumero")){
             str = str.replace("sensor-update "+String.valueOf((char)0x22)+"primeiroNumero"+String.valueOf((char)0x22),"");    
             str = str.replace(String.valueOf((char)0x22)+"resultado"+String.valueOf((char)0x22),"");
             str = str.replace(String.valueOf((char)0x22)+"segundoNumero"+String.valueOf((char)0x22),"");
             str = str.substring(1,str.length());
-           if(str.contains("velocidade") && str.contains("tempo") && str.contains("total")){
-               
-           }// End if
+           
             String[] string = str.split("  ");
             
             string[0] = string[0].trim();
@@ -113,9 +138,9 @@ public class Scratch{
                     e.printStackTrace();
                 }// End catch
             }else{
-                string[0] = getNumber(string[0]) != null ? getNumber(string[0]) : "0";
-                string[1] = getNumber(string[1]) != null ? getNumber(string[1]) : "0";
-                string[2] = getNumber(string[2]) != null ? getNumber(string[2]) : "0";
+                string[0] = getNumber(string[0]) != null ? getNumber(string[0]).trim() : "-2";
+                string[1] = getNumber(string[1]) != null ? getNumber(string[1]).trim() : "-2";
+                string[2] = getNumber(string[2]) != null ? getNumber(string[2]).trim() : "-2";
                 
                 try{    
                     integer[0] = Integer.parseInt(string[0]);
@@ -126,21 +151,18 @@ public class Scratch{
                 }// End catch
             }// End else
             
-            if(resultado.getValor1_soma1() == -1 && resultado.getValor2_soma1() == -1 && resultado.getResposta_soma1() == -1 && resultado.getResultado_soma1() == -1){
+            if(resultado.getValor1_soma1() == -1 && resultado.getValor2_soma1() == -1 && resultado.getResultado_soma1() == -1){
                resultado.setValor1_soma1(integer[0]);
                resultado.setValor2_soma1(integer[2]);
-               resultado.setResposta_soma1(integer[1]);
-               resultado.setResultado_soma1(23);
-            }else if(resultado.getValor1_soma2() == -1 && resultado.getValor2_soma2() == -1 && resultado.getResposta_soma2() == -1 && resultado.getResultado_soma2() == -1){
+               resultado.setResultado_soma1(integer[1]);
+            }else if(resultado.getValor1_soma2() == -1 && resultado.getValor2_soma2() == -1 && resultado.getResultado_soma2() == -1){
                 resultado.setValor1_soma2(integer[0]);
                 resultado.setValor2_soma2(integer[2]);
-                resultado.setResposta_soma2(integer[1]);
-                resultado.setResultado_soma2(23);
+                resultado.setResultado_soma2(integer[1]);
             }else{
                 resultado.setValor1_soma3(integer[0]);
                 resultado.setValor2_soma3(integer[2]);
-                resultado.setResposta_soma3(integer[1]);
-                resultado.setResultado_soma3(23);
+                resultado.setResultado_soma3(integer[1]);
             }// End else
         }// End else if
         
@@ -162,6 +184,17 @@ public class Scratch{
         return resp;
     }// End isNumber()
     
+    public static String getInt(String[] string){
+        int i,j = 0;
+        for(i = 0; i < string.length; i++){
+            if(string[i].equals(String.valueOf((char)0x22)+"resposta"+String.valueOf((char)0x22))){
+                j = (i+1);
+                i = string.length;
+            }// End if
+        }// End for
+        return string[j];
+    }// End getInt()
+    
     public static String getNumber(String str){
         String string = "";
         boolean flag_fitstposition = false;
@@ -176,24 +209,6 @@ public class Scratch{
         return isNumber(string.trim()) ? string.trim() : null;
     }// End getNumber()
     
-    /**
-     * 
-     * @throws InterruptedException 
-     */
-    private static void carregando() throws InterruptedException{
-	int i = 0;
-        System.out.print("Loading " + (char)0x5B);
-        String loading = "";
-        
-        while(loading.length() < 10){
-            loading += (char)0x23;
-            Thread.sleep(1000);
-            System.out.print(loading);
-            i++;
-        }// while
-        System.out.println((char)0x3E + "" + (char)0x5D + " - 100%");
-    }// End carregando()
-
     /**
      * 
      */
@@ -217,23 +232,4 @@ public class Scratch{
         in.readShort();
         return in.readUTF();
    }// End readMessage()
-   
-   /**
-     *
-     * @param args
-     * @throws java.lang.Exception
-     */
-  
-   public static void main(String[] args) throws Exception{
-        System.out.println("\n#################################################################################################################\n");
-        System.out.println("PONTIFÍCIA UNIVERSIDADE CATOLICA DE MINAS GERAIS - PUC MINAS");
-        System.out.println("INSTITUTO DE CIENCIAS EXATAS INFORMATICA - ICEI");
-        System.out.println("DEPARTAMENTO DE CIENCIA DA COMPUTACAO - DCC\n");
-        System.out.println("=================================================================================================================\n");
-        System.out.println("Software desenvolvido para a Disciplina de Introducao a pesquisa e informastica - IPI");
-        System.out.println("Desenvolvido por: Vinicius Francisco da Silva, Stefany Gaspar\n");
-        System.out.println("=================================================================================================================\n");
-        System.out.println("BASE PARA COMUNICAÇÃO ENTRE SOFTWARES JAVA E SCRATCH");    
-        chegadaDados();
-   }// End main()
 }// End class Scratch
