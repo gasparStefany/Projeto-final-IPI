@@ -25,6 +25,7 @@ import resultado.Resultado;
 /**
  * 
  * @author Vinicius Francisco da Silva
+ * @Stefany
  */
 public class Scratch{
    private static DataBase db;
